@@ -82,6 +82,10 @@ def load_luar_reddit() -> datasets.Dataset:
     d = d.rename_column("embedding", "frozen_embeddings")
     return d
 
+def load_dsa_hk231_instructions() -> datasets.Dataset:
+    d = datasets.load_dataset("stair-lab/dsa_hk231_wtc_per_student_answer_embedded")["train"]
+    return d
+
 
 def dataset_from_args(data_args: DataArguments) -> datasets.DatasetDict:
     """Loads a dataset from data_args create in `run_args`."""
@@ -102,6 +106,10 @@ def dataset_from_args(data_args: DataArguments) -> datasets.DatasetDict:
         raw_datasets["validation"] = raw_datasets["test"]
     elif data_args.dataset_name == "one_million_instructions":
         raw_datasets = load_one_million_instructions()
+        raw_datasets = raw_datasets.train_test_split(test_size=0.01)
+        raw_datasets["validation"] = raw_datasets["test"]
+    elif data_args.dataset_name == "dsa_hk231":
+        raw_datasets = load_dsa_hk231_instructions()
         raw_datasets = raw_datasets.train_test_split(test_size=0.01)
         raw_datasets["validation"] = raw_datasets["test"]
     elif data_args.dataset_name == "luar_reddit":
@@ -242,13 +250,14 @@ def load_beir_datasets() -> datasets.DatasetDict:
 def load_standard_val_datasets() -> datasets.DatasetDict:
     """Loads a pre-defined set of standard val datasets."""
     d = {
-        "ag_news": load_ag_news_test(),
-        "anthropic_toxic_prompts": load_anthropic_toxic_prompts(),
-        "arxiv": load_arxiv_val(),
-        "python_code_alpaca": load_python_code_instructions_18k_alpaca(),
+        # "ag_news": load_ag_news_test(),
+        # "anthropic_toxic_prompts": load_anthropic_toxic_prompts(),
+        # "arxiv": load_arxiv_val(),
+        # "python_code_alpaca": load_python_code_instructions_18k_alpaca(),
         # "xsum_doc": load_xsum_val("document"),
         # "xsum_summ": load_xsum_val("summary"),
-        "wikibio": load_wikibio_val(),
+        # "wikibio": load_wikibio_val(),
+        "dsa_hk231": load_dsa_hk231_instructions(),
     }
     d = {k: retain_dataset_columns(v, ["text"]) for k, v in d.items()}
 

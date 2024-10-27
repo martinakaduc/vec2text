@@ -490,23 +490,23 @@ class Experiment(abc.ABC):
         # filter out empty examples (these exist for xsum documents).
         val_datasets_dict = val_datasets_dict.filter(lambda ex: ex["length"] > 1)
 
-        if self.model_args.use_frozen_embeddings_as_input:
-            assert torch.cuda.is_available()
-            model = model.to(device)
+        # if self.model_args.use_frozen_embeddings_as_input:
+        #     assert torch.cuda.is_available()
+        #     model = model.to(device)
 
-            new_tokenized_datasets = {}
-            for key, d in val_datasets_dict.items():
-                new_tokenized_datasets[key] = dataset_map_multi_worker(
-                    dataset=d,
-                    map_fn=functools.partial(embed_dataset_batch, model),
-                    batched=True,
-                    batch_size=self.training_args.per_device_train_batch_size,
-                    new_fingerprint=(
-                        d._fingerprint + md5_hash_kwargs(**self.dataset_kwargs) + ""
-                    ),
-                    num_proc=1,
-                )
-            val_datasets_dict = datasets.DatasetDict(new_tokenized_datasets)
+        #     new_tokenized_datasets = {}
+        #     for key, d in val_datasets_dict.items():
+        #         new_tokenized_datasets[key] = dataset_map_multi_worker(
+        #             dataset=d,
+        #             map_fn=functools.partial(embed_dataset_batch, model),
+        #             batched=True,
+        #             batch_size=self.training_args.per_device_train_batch_size,
+        #             new_fingerprint=(
+        #                 d._fingerprint + md5_hash_kwargs(**self.dataset_kwargs) + ""
+        #             ),
+        #             num_proc=1,
+        #         )
+        #     val_datasets_dict = datasets.DatasetDict(new_tokenized_datasets)
         return val_datasets_dict
 
     def _load_val_datasets_uncached(

@@ -23,7 +23,10 @@ class CorrectorEncoderModel(transformers.PreTrainedModel):
     ):
         super().__init__(config=config)
         if config.embedder_model_api:
-            embedder_dim = 1536
+            if config.embedder_model_api.startswith("text-embedding-ada"):
+                self.embedder_dim = 1536
+            else:
+                self.embedder_dim = 2048 # Hard-coded for DeepSeek
         else:
             embedder_dim = 768
         bottleneck_dim = embedder_dim

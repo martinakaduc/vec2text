@@ -30,6 +30,7 @@ EMBEDDER_MODEL_NAMES = [
     "gpt2-medium",
     "gpt2-large",
     "gpt2-xl",
+    "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct"
 ]
 
 

@@ -3,13 +3,15 @@ import multiprocessing
 import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor
-from typing import Callable
+from typing import Callable, List
 
 import datasets
 import numpy as np
 import torch
 import tqdm
 import transformers
+import json
+import requests
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 datasets.disable_caching()
@@ -181,6 +183,24 @@ def get_manifest_global():
     return manifest_object
 
 
+def get_embedding_from_server(
+    server_url: str, list_sequences: List[str]
+) -> List[torch.Tensor]:
+    r"""
+    Gets reward scores from the API server.
+    """
+    headers = {"Content-Type": "application/json"}
+    payload = {"messages": list_sequences}
+    response = requests.post(
+        server_url,
+        json=payload,
+        headers=headers,
+        timeout=300,
+    )
+    embeddings = json.loads(response.text)["embedding"]
+    return embeddings
+
+
 @retry(wait=wait_fixed(1), stop=stop_after_attempt(15))
 def get_embeddings_openai_manifest(
     text_list, model="text-embedding-ada-002"
@@ -268,7 +288,9 @@ def embed_api(
             model=api_name,
         )
     else:
-        raise ValueError(f"unsupported api name {api_name}")
+         embeddings = get_embedding_from_server(api_name, text_list)
+    # else:
+    #     raise ValueError(f"unsupported api name {api_name}")
 
     return torch.tensor(embeddings, device=input_ids.device, dtype=torch.float32)
 

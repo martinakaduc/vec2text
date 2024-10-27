@@ -5,6 +5,7 @@ from typing import Dict, Optional, Tuple
 import torch
 import torch.nn as nn
 import transformers
+from transformers import AutoTokenizer
 from sentence_transformers import SentenceTransformer
 
 from vec2text.models.config import InversionConfig
@@ -59,9 +60,13 @@ class InversionModel(transformers.PreTrainedModel):
             lora=config.use_lora,
         )
 
-        embedder, embedder_tokenizer = load_embedder_and_tokenizer(
-            name=config.embedder_model_name, torch_dtype=config.embedder_torch_dtype
-        )
+        if not use_frozen_embeddings_as_input:
+            embedder, embedder_tokenizer = load_embedder_and_tokenizer(
+                name=config.embedder_model_name, torch_dtype=config.embedder_torch_dtype
+            )
+        else:
+            embedder = None
+            embedder_tokenizer = AutoTokenizer.from_pretrained(config.embedder_model_name)
 
         tokenizer = load_tokenizer(
             config.model_name_or_path,
@@ -80,7 +85,10 @@ class InversionModel(transformers.PreTrainedModel):
         if embedder_model_api:
             assert use_frozen_embeddings_as_input, "must precompute embeddings w/ api"
             # Hard-code OpenAI embedding dim
-            self.embedder_dim = 1536
+            if embedder_model_api.startswith("text-embedding-ada"):
+                self.embedder_dim = 1536
+            else:
+                self.embedder_dim = 2048 # Hard-coded for DeepSeek
             bottleneck_dim = self.embedder_dim
         elif isinstance(embedder, SentenceTransformer):
             self.embedder_dim = embedder.get_sentence_embedding_dimension()
@@ -106,11 +114,12 @@ class InversionModel(transformers.PreTrainedModel):
         ######################################################
         self.tokenizer = tokenizer
         self.embedder = embedder
-        if self.embedder_no_grad:
-            for param in self.embedder.parameters():
-                param.requires_grad = False
+        if embedder:
+            if self.embedder_no_grad:
+                for param in self.embedder.parameters():
+                    param.requires_grad = False
 
-            self.embedder.eval()
+                self.embedder.eval()
 
         self.embedder_tokenizer = embedder_tokenizer
         self.embedder_model_api = embedder_model_api
@@ -176,34 +185,35 @@ class InversionModel(transformers.PreTrainedModel):
         token_type_ids: Optional[torch.Tensor] = None,
         # token_type_ids: Optional[torch.Tensor] = None, # not used
     ) -> torch.Tensor:
-        embedder = self.embedder
-        # print("** call_embedding_model")
-        if self.embedder_no_grad:
-            embedder.eval()
-
-        if self.embedder_fake_with_zeros:
-            batch_size = input_ids.shape[0]
-            return torch.zeros(
-                (batch_size, self.embedder_dim),
-                dtype=torch.float32,
-                device=self.embedder_device,
-            )
-        elif self.embedder_model_api:
+        if self.embedder_model_api:
             embeddings = embed_api(
                 input_ids=input_ids,
                 embedder_tokenizer=self.embedder_tokenizer,
                 api_name=self.embedder_model_api,
             )
-        elif isinstance(self.embedder, SentenceTransformer):
-            # sentence-transformers is kind of really annoying
-            model_inputs = {"input_ids": input_ids, "attention_mask": attention_mask}
-            if token_type_ids is not None:
-                model_inputs["token_type_ids"] = token_type_ids
-            model_output = embedder(model_inputs)
-            embeddings = model_output["sentence_embedding"]
-        else:
-            model_output = embedder(input_ids=input_ids, attention_mask=attention_mask)
-            embeddings = self._process_embedder_output(model_output, attention_mask)
+        elif self.embedder:
+            embedder = self.embedder
+            # print("** call_embedding_model")
+            if self.embedder_no_grad:
+                embedder.eval()
+
+            if self.embedder_fake_with_zeros:
+                batch_size = input_ids.shape[0]
+                return torch.zeros(
+                    (batch_size, self.embedder_dim),
+                    dtype=torch.float32,
+                    device=self.embedder_device,
+            )
+            elif isinstance(self.embedder, SentenceTransformer):
+                # sentence-transformers is kind of really annoying
+                model_inputs = {"input_ids": input_ids, "attention_mask": attention_mask}
+                if token_type_ids is not None:
+                    model_inputs["token_type_ids"] = token_type_ids
+                model_output = embedder(model_inputs)
+                embeddings = model_output["sentence_embedding"]
+            else:
+                model_output = embedder(input_ids=input_ids, attention_mask=attention_mask)
+                embeddings = self._process_embedder_output(model_output, attention_mask)
 
         if self.training and self.noise_level > 0:
             embeddings += self.noise_level * torch.randn(
